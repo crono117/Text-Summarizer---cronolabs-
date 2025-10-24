@@ -1,0 +1,25 @@
+# Lightweight Requirements for Codespace Development
+# This file excludes heavy ML libraries for faster development
+# To use full ML capabilities, switch to dev.txt or prod.txt
+
+-r base.txt
+
+# Development tools (from dev.txt but lightweight)
+pytest==7.4.4
+pytest-django==4.7.0
+pytest-cov==4.1.0
+factory-boy==3.3.0
+faker==22.0.0
+
+# Code quality
+black==23.12.1
+isort==5.13.2
+flake8==7.0.0
+
+# Debugging
+django-debug-toolbar==4.2.0
+ipython==8.20.0
+ipdb==0.13.13
+
+# Profiling
+django-silk==5.0.4

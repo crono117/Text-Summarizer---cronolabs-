@@ -1,0 +1,235 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - SummaSaaS{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50 py-8">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+
+        <!-- Hero Section -->
+        <div class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-900">Welcome back, {{ user.email }}!</h1>
+            <p class="mt-2 text-gray-600">Here's an overview of your SummaSaaS activity</p>
+        </div>
+
+        <!-- Messages -->
+        {% if messages %}
+        <div class="mb-6">
+            {% for message in messages %}
+            <div class="{% if message.tags == 'error' %}bg-red-100 border-red-400 text-red-700{% elif message.tags == 'success' %}bg-green-100 border-green-400 text-green-700{% else %}bg-blue-100 border-blue-400 text-blue-700{% endif %} border px-4 py-3 rounded relative mb-3" role="alert">
+                <span class="block sm:inline">{{ message }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Quick Actions -->
+        <div class="mb-8 flex flex-wrap gap-4">
+            <a href="{% url 'summarizer:playground' %}" class="gradient-bg text-white px-6 py-3 rounded-lg font-semibold hover:opacity-90 transition duration-200 inline-flex items-center">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                </svg>
+                New Summary
+            </a>
+            <a href="#recent-summaries" class="bg-white text-gray-700 px-6 py-3 rounded-lg font-semibold border-2 border-gray-300 hover:border-purple-500 transition duration-200 inline-flex items-center">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                View History
+            </a>
+            {% if plan_name == 'Free' %}
+            <a href="{% url 'billing:pricing' %}" class="bg-gradient-to-r from-yellow-400 to-orange-500 text-white px-6 py-3 rounded-lg font-semibold hover:opacity-90 transition duration-200 inline-flex items-center">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                </svg>
+                Upgrade Plan
+            </a>
+            {% endif %}
+        </div>
+
+        <!-- Usage Statistics Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+
+            <!-- Current Plan Card -->
+            <div class="bg-white rounded-lg shadow-md p-6 border-t-4 border-purple-500">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-gray-600 text-sm font-semibold uppercase">Current Plan</h3>
+                    <svg class="w-6 h-6 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path>
+                    </svg>
+                </div>
+                <p class="text-3xl font-bold text-gray-900">{{ plan_name }}</p>
+                {% if plan_name == 'Free' %}
+                <p class="text-sm text-gray-600 mt-1">Upgrade for more features</p>
+                {% endif %}
+            </div>
+
+            <!-- Characters Used Card -->
+            <div class="bg-white rounded-lg shadow-md p-6 border-t-4 border-blue-500">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-gray-600 text-sm font-semibold uppercase">Characters Used</h3>
+                    <svg class="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                    </svg>
+                </div>
+                <p class="text-3xl font-bold text-gray-900">{{ characters_used|floatformat:0 }}</p>
+                <p class="text-sm text-gray-600 mt-1">of {{ character_limit|floatformat:0 }} this month</p>
+
+                <!-- Progress Bar -->
+                <div class="w-full bg-gray-200 rounded-full h-2 mt-3">
+                    <div class="{% if usage_percentage >= 90 %}bg-red-500{% elif usage_percentage >= 70 %}bg-yellow-500{% else %}bg-blue-500{% endif %} h-2 rounded-full transition-all duration-500" style="width: {{ usage_percentage }}%"></div>
+                </div>
+            </div>
+
+            <!-- Characters Remaining Card -->
+            <div class="bg-white rounded-lg shadow-md p-6 border-t-4 border-green-500">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-gray-600 text-sm font-semibold uppercase">Remaining</h3>
+                    <svg class="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+                <p class="text-3xl font-bold text-gray-900">{{ characters_remaining|floatformat:0 }}</p>
+                <p class="text-sm text-gray-600 mt-1">characters available</p>
+                <p class="text-xs text-gray-500 mt-2">Resets on {{ reset_date|date:"M d, Y" }}</p>
+            </div>
+
+            <!-- Total Tasks Card -->
+            <div class="bg-white rounded-lg shadow-md p-6 border-t-4 border-indigo-500">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-gray-600 text-sm font-semibold uppercase">Total Summaries</h3>
+                    <svg class="w-6 h-6 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                    </svg>
+                </div>
+                <p class="text-3xl font-bold text-gray-900">{{ total_tasks }}</p>
+                <p class="text-sm text-gray-600 mt-1">{{ tasks_this_month }} this month</p>
+            </div>
+        </div>
+
+        <!-- Additional Stats -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-green-100 text-green-600">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-gray-600 text-sm font-semibold">Completed</p>
+                        <p class="text-2xl font-bold text-gray-900">{{ completed_tasks }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-red-100 text-red-600">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-gray-600 text-sm font-semibold">Failed</p>
+                        <p class="text-2xl font-bold text-gray-900">{{ failed_tasks }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-blue-100 text-blue-600">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                        </svg>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-gray-600 text-sm font-semibold">Success Rate</p>
+                        <p class="text-2xl font-bold text-gray-900">
+                            {% if total_tasks > 0 %}
+                                {{ completed_tasks|floatformat:0 }}%
+                            {% else %}
+                                0%
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Summarizations -->
+        <div id="recent-summaries" class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-2xl font-bold text-gray-900">Recent Summarizations</h2>
+                <a href="{% url 'summarizer:playground' %}" class="text-purple-600 hover:text-purple-700 font-medium">View All →</a>
+            </div>
+
+            {% if recent_tasks %}
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Input Preview</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mode</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Characters</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for task in recent_tasks %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-6 py-4 text-sm text-gray-900">{{ task.get_input_preview }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                                    {{ task.get_mode_display }}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                {% if task.status == 'completed' %}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                                    Completed
+                                </span>
+                                {% elif task.status == 'failed' %}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
+                                    Failed
+                                </span>
+                                {% else %}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                                    Pending
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ task.created_at|date:"M d, Y H:i" }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {% if task.result %}
+                                    {{ task.result.characters_processed }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-12">
+                <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                </svg>
+                <h3 class="mt-2 text-sm font-medium text-gray-900">No summarizations yet</h3>
+                <p class="mt-1 text-sm text-gray-500">Get started by creating your first summary!</p>
+                <div class="mt-6">
+                    <a href="{% url 'summarizer:playground' %}" class="gradient-bg text-white px-6 py-2 rounded-lg font-medium hover:opacity-90 transition duration-200 inline-block">
+                        Create Summary
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+    </div>
+</div>
+{% endblock %}

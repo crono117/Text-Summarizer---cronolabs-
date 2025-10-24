@@ -1,0 +1,13 @@
+# Production Requirements
+# Include base requirements
+-r base.txt
+
+# Monitoring & Error Tracking
+sentry-sdk==1.40.0
+
+# Performance
+gevent==23.9.1
+
+# Security
+django-csp==3.7
+django-permissions-policy==4.19.0
