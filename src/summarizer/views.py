@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import time
 
 from .models import SummarizationTask, SummaryResult
-from billing.models import Subscription, UsageQuota, Plan
+from billing.models import Subscription, Plan
 
 
 @login_required
@@ -17,39 +17,38 @@ def dashboard(request):
     """
     user = request.user
 
-    # Get user's current subscription and plan
-    try:
-        subscription = Subscription.objects.filter(
-            user=user,
-            status='active'
-        ).select_related('plan').first()
+    # Get user's account and subscription using new multi-tenant architecture
+    account = user.owned_accounts.first()
+    if not account:
+        # Check if user is a member of an account
+        membership = user.account_memberships.first()
+        account = membership.account if membership else None
 
-        if subscription:
+    subscription = None
+    plan = None
+
+    if account:
+        try:
+            # Get subscription (it's OneToOne, so use .subscription not .subscriptions)
+            subscription = account.subscription
             plan = subscription.plan
-        else:
+        except Subscription.DoesNotExist:
             # Default to FREE plan if no subscription
-            plan = Plan.objects.filter(name='FREE').first()
-            subscription = None
-    except Plan.DoesNotExist:
-        plan = None
-        subscription = None
+            plan = Plan.objects.filter(code='FREE').first()
+    else:
+        # Default to FREE plan if no account
+        plan = Plan.objects.filter(code='FREE').first()
 
-    # Get or create current usage quota
+    # Calculate usage statistics using User model fields
+    characters_used = user.monthly_char_used
+    character_limit = plan.char_limit if plan else 10000
+    characters_remaining = max(0, character_limit - characters_used)
+    usage_percentage = (characters_used / character_limit * 100) if character_limit > 0 else 0
+
+    # Calculate reset date (end of current month)
     today = timezone.now().date()
     first_day_of_month = today.replace(day=1)
     last_day_of_month = (first_day_of_month + timedelta(days=32)).replace(day=1) - timedelta(days=1)
-
-    usage_quota, created = UsageQuota.objects.get_or_create(
-        user=user,
-        reset_date=last_day_of_month,
-        defaults={'characters_used': 0}
-    )
-
-    # Calculate usage statistics
-    characters_used = usage_quota.characters_used
-    character_limit = plan.character_limit if plan else 10000
-    characters_remaining = max(0, character_limit - characters_used)
-    usage_percentage = (characters_used / character_limit * 100) if character_limit > 0 else 0
 
     # Get recent summarization tasks
     recent_tasks = SummarizationTask.objects.filter(
@@ -70,7 +69,7 @@ def dashboard(request):
     context = {
         'subscription': subscription,
         'plan': plan,
-        'plan_name': plan.get_name_display() if plan else 'Free',
+        'plan_name': plan.display_name if plan else 'Free',
         'characters_used': characters_used,
         'character_limit': character_limit,
         'characters_remaining': characters_remaining,
@@ -80,7 +79,7 @@ def dashboard(request):
         'completed_tasks': completed_tasks,
         'failed_tasks': failed_tasks,
         'tasks_this_month': tasks_this_month,
-        'reset_date': usage_quota.reset_date,
+        'reset_date': last_day_of_month,
     }
 
     return render(request, 'dashboard/dashboard.html', context)
@@ -97,30 +96,27 @@ def playground(request):
     mode = 'extractive'
     max_length = 150
 
-    # Get user's plan and usage quota
-    try:
-        subscription = Subscription.objects.filter(
-            user=user,
-            status='active'
-        ).select_related('plan').first()
+    # Get user's account and subscription using new multi-tenant architecture
+    account = user.owned_accounts.first()
+    if not account:
+        # Check if user is a member of an account
+        membership = user.account_memberships.first()
+        account = membership.account if membership else None
 
-        if subscription:
+    subscription = None
+    plan = None
+
+    if account:
+        try:
+            # Get subscription (it's OneToOne, so use .subscription not .subscriptions)
+            subscription = account.subscription
             plan = subscription.plan
-        else:
-            plan = Plan.objects.filter(name='FREE').first()
-    except Plan.DoesNotExist:
-        plan = None
-
-    # Get current usage quota
-    today = timezone.now().date()
-    first_day_of_month = today.replace(day=1)
-    last_day_of_month = (first_day_of_month + timedelta(days=32)).replace(day=1) - timedelta(days=1)
-
-    usage_quota, created = UsageQuota.objects.get_or_create(
-        user=user,
-        reset_date=last_day_of_month,
-        defaults={'characters_used': 0}
-    )
+        except Subscription.DoesNotExist:
+            # Default to FREE plan if no subscription
+            plan = Plan.objects.filter(code='FREE').first()
+    else:
+        # Default to FREE plan if no account
+        plan = Plan.objects.filter(code='FREE').first()
 
     if request.method == 'POST':
         input_text = request.POST.get('input_text', '').strip()
@@ -132,12 +128,15 @@ def playground(request):
         else:
             character_count = len(input_text)
 
-            # Check if user has enough quota
-            if plan and not usage_quota.can_process(character_count, plan):
+            # Check if user has enough quota using new architecture
+            character_limit = plan.char_limit if plan else 10000
+            characters_remaining = max(0, character_limit - user.monthly_char_used)
+
+            if user.monthly_char_used + character_count > character_limit:
                 messages.error(
                     request,
                     f'Not enough quota. You need {character_count} characters but only have '
-                    f'{usage_quota.remaining_characters(plan)} remaining.'
+                    f'{characters_remaining} remaining.'
                 )
             else:
                 # Create summarization task
@@ -175,9 +174,9 @@ def playground(request):
                 # Mark task as completed
                 task.mark_completed()
 
-                # Update usage quota
-                usage_quota.characters_used += character_count
-                usage_quota.save()
+                # Update usage tracking on User model
+                user.monthly_char_used += character_count
+                user.save(update_fields=['monthly_char_used'])
 
                 summary_result = result
                 messages.success(
@@ -185,9 +184,9 @@ def playground(request):
                     f'Summary generated successfully! Processed {character_count} characters in {processing_time_ms}ms.'
                 )
 
-    # Calculate remaining quota
-    character_limit = plan.character_limit if plan else 10000
-    characters_remaining = usage_quota.remaining_characters(plan) if plan else 10000
+    # Calculate remaining quota using new architecture
+    character_limit = plan.char_limit if plan else 10000
+    characters_remaining = max(0, character_limit - user.monthly_char_used)
 
     context = {
         'input_text': input_text,

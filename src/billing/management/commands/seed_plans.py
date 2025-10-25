@@ -1,108 +1,115 @@
+"""
+Management command to seed billing plans with multi-tenant pricing tiers
+
+Usage:
+    python manage.py seed_plans
+"""
+
 from django.core.management.base import BaseCommand
 from billing.models import Plan
 
 
 class Command(BaseCommand):
-    help = 'Seeds the database with subscription plans for SummaSaaS'
+    help = 'Seed billing plans with FREE, PLUS, PRO, and ENTERPRISE tiers'
 
     def handle(self, *args, **options):
-        """Create or update subscription plans"""
+        self.stdout.write('Seeding billing plans...')
 
         plans_data = [
             {
-                'name': 'FREE',
-                'monthly_price': 0.00,
-                'character_limit': 10000,
-                'api_rate_limit_per_hour': 10,
-                'features': {
-                    'basic_summarization': True,
-                    'save_summaries': False,
-                    'api_access': False,
-                    'priority_support': False,
-                    'custom_models': False,
-                }
+                'code': 'FREE',
+                'display_name': 'Free',
+                'monthly_price_usd': 0.00,
+                'char_limit': 10_000,
+                'req_per_hour': 10,
+                'max_seats': 1,
+                'max_concurrent_sessions': 2,
+                'allow_team_members': False,
+                'priority_support': False,
+                'sla': False,
             },
             {
-                'name': 'STARTER',
-                'monthly_price': 9.99,
-                'character_limit': 100000,
-                'api_rate_limit_per_hour': 100,
-                'features': {
-                    'basic_summarization': True,
-                    'save_summaries': True,
-                    'api_access': True,
-                    'priority_support': False,
-                    'custom_models': False,
-                }
+                'code': 'PLUS',
+                'display_name': 'Plus',
+                'monthly_price_usd': 9.99,
+                'char_limit': 100_000,
+                'req_per_hour': 100,
+                'max_seats': 1,
+                'max_concurrent_sessions': 2,
+                'allow_team_members': False,
+                'priority_support': False,
+                'sla': False,
             },
             {
-                'name': 'PRO',
-                'monthly_price': 29.99,
-                'character_limit': 1000000,
-                'api_rate_limit_per_hour': 1000,
-                'features': {
-                    'basic_summarization': True,
-                    'save_summaries': True,
-                    'api_access': True,
-                    'priority_support': True,
-                    'custom_models': False,
-                    'batch_processing': True,
-                }
+                'code': 'PRO',
+                'display_name': 'Pro',
+                'monthly_price_usd': 29.99,
+                'char_limit': 1_000_000,
+                'req_per_hour': 1000,
+                'max_seats': 5,
+                'max_concurrent_sessions': 8,
+                'allow_team_members': True,
+                'priority_support': True,
+                'sla': False,
             },
             {
-                'name': 'ENTERPRISE',
-                'monthly_price': 99.99,
-                'character_limit': 10000000,
-                'api_rate_limit_per_hour': 0,  # 0 means unlimited
-                'features': {
-                    'basic_summarization': True,
-                    'save_summaries': True,
-                    'api_access': True,
-                    'priority_support': True,
-                    'custom_models': True,
-                    'batch_processing': True,
-                    'dedicated_support': True,
-                    'sla_guarantee': True,
-                }
-            },
+                'code': 'ENTERPRISE',
+                'display_name': 'Enterprise',
+                'monthly_price_usd': 99.99,
+                'char_limit': 10_000_000,
+                'req_per_hour': 10000,
+                'max_seats': 20,
+                'max_concurrent_sessions': 40,
+                'allow_team_members': True,
+                'priority_support': True,
+                'sla': True,
+            }
         ]
 
         created_count = 0
         updated_count = 0
 
         for plan_data in plans_data:
-            plan, created = Plan.objects.get_or_create(
-                name=plan_data['name'],
-                defaults={
-                    'monthly_price': plan_data['monthly_price'],
-                    'character_limit': plan_data['character_limit'],
-                    'api_rate_limit_per_hour': plan_data['api_rate_limit_per_hour'],
-                    'features': plan_data['features'],
-                }
+            plan, created = Plan.objects.update_or_create(
+                code=plan_data['code'],
+                defaults=plan_data
             )
 
             if created:
                 created_count += 1
                 self.stdout.write(
-                    self.style.SUCCESS(f"Created plan: {plan.get_name_display()}")
+                    self.style.SUCCESS(f'✓ Created plan: {plan.display_name} (${plan.monthly_price_usd}/month)')
                 )
             else:
-                # Update existing plan
-                plan.monthly_price = plan_data['monthly_price']
-                plan.character_limit = plan_data['character_limit']
-                plan.api_rate_limit_per_hour = plan_data['api_rate_limit_per_hour']
-                plan.features = plan_data['features']
-                plan.save()
                 updated_count += 1
                 self.stdout.write(
-                    self.style.WARNING(f"Updated plan: {plan.get_name_display()}")
+                    self.style.WARNING(f'↻ Updated plan: {plan.display_name} (${plan.monthly_price_usd}/month)')
                 )
 
+        self.stdout.write('')
         self.stdout.write(
             self.style.SUCCESS(
-                f"\nSummary: {created_count} plans created, {updated_count} plans updated"
+                f'Done! Created {created_count} plans, updated {updated_count} plans.'
             )
         )
+        self.stdout.write('')
+
+        # Display summary table
+        self.stdout.write(self.style.SUCCESS('Plan Summary:'))
+        self.stdout.write('─' * 100)
         self.stdout.write(
-            self.style.SUCCESS(f"Total plans in database: {Plan.objects.count()}")
+            f"{'Plan':<12} {'Price':<10} {'Chars/Mo':<15} {'Rate/Hr':<10} {'Seats':<7} {'Sessions':<10}"
         )
+        self.stdout.write('─' * 100)
+
+        for plan in Plan.objects.all():
+            self.stdout.write(
+                f"{plan.display_name:<12} "
+                f"${plan.monthly_price_usd:<9} "
+                f"{plan.char_limit:>13,}  "
+                f"{plan.req_per_hour:>8}  "
+                f"{plan.max_seats:>5}  "
+                f"{plan.max_concurrent_sessions:>8}"
+            )
+
+        self.stdout.write('─' * 100)

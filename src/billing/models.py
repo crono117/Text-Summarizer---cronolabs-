@@ -1,141 +1,140 @@
 from django.db import models
-from django.contrib.auth.models import User
+from django.conf import settings
 from django.utils import timezone
 
 
 class Plan(models.Model):
-    """Billing plans available for users"""
+    """
+    Billing plan tiers.
 
-    PLAN_CHOICES = [
-        ('FREE', 'Free'),
-        ('STARTER', 'Starter'),
-        ('PRO', 'Pro'),
-        ('ENTERPRISE', 'Enterprise'),
-    ]
+    CRITICAL: Must have separate 'code' and 'display_name' fields.
+    """
 
-    name = models.CharField(
+    # Identification (spec requires BOTH fields)
+    code = models.CharField(
         max_length=20,
-        choices=PLAN_CHOICES,
         unique=True,
-        help_text="Name of the billing plan"
+        choices=[
+            ('FREE', 'FREE'),
+            ('PLUS', 'PLUS'),
+            ('PRO', 'PRO'),
+            ('ENTERPRISE', 'ENTERPRISE')
+        ],
+        help_text="Internal plan code (FREE, PLUS, PRO, ENTERPRISE)"
     )
-    monthly_price = models.DecimalField(
+    display_name = models.CharField(
+        max_length=100,
+        help_text="Marketing label (e.g., 'Professional Plan')"
+    )
+
+    # Pricing
+    monthly_price_usd = models.DecimalField(
         max_digits=10,
         decimal_places=2,
-        help_text="Monthly subscription price in USD"
+        help_text="Price in USD per month"
     )
-    character_limit = models.IntegerField(
-        help_text="Maximum characters allowed per month"
+    stripe_price_id = models.CharField(
+        max_length=100,
+        blank=True,
+        default='',
+        help_text="Stripe Price ID (e.g., price_xxxxx)"
     )
-    api_rate_limit_per_hour = models.IntegerField(
-        help_text="Maximum API requests allowed per hour"
+
+    # Quota limits (EXACT field names from spec!)
+    char_limit = models.BigIntegerField(
+        help_text="Monthly character limit"
     )
-    features = models.JSONField(
-        default=dict,
-        help_text="Additional features included in this plan"
+    req_per_hour = models.IntegerField(
+        help_text="API requests allowed per hour"
+    )
+
+    # Team features
+    max_seats = models.IntegerField(
+        help_text="Maximum team members (1 for FREE/PLUS, 5+ for PRO/ENTERPRISE)"
+    )
+    max_concurrent_sessions = models.IntegerField(
+        default=2,
+        help_text="Max concurrent sessions per user"
+    )
+    allow_team_members = models.BooleanField(
+        default=False,
+        help_text="Whether plan allows inviting team members"
+    )
+
+    # Support SLA
+    priority_support = models.BooleanField(
+        default=False,
+        help_text="Dedicated support channel"
+    )
+    sla = models.BooleanField(
+        default=False,
+        help_text="SLA guarantee (99.9% uptime, etc.)"
     )
 
     class Meta:
-        ordering = ['monthly_price']
-        verbose_name = 'Plan'
-        verbose_name_plural = 'Plans'
+        ordering = ['monthly_price_usd']
 
     def __str__(self):
-        return f"{self.get_name_display()} - ${self.monthly_price}/month"
+        return f"{self.code} - ${self.monthly_price_usd}/mo"
 
 
 class Subscription(models.Model):
-    """User subscription to a billing plan"""
+    """
+    Links CustomerAccount to a Plan.
 
-    STATUS_CHOICES = [
-        ('active', 'Active'),
-        ('past_due', 'Past Due'),
-        ('canceled', 'Canceled'),
-    ]
+    CRITICAL: Must be OneToOneField, not ForeignKey!
+    Each account has exactly ONE active subscription at a time.
+    """
 
-    user = models.ForeignKey(
-        User,
+    # OneToOne relationship (only 1 active subscription per account)
+    account = models.OneToOneField(
+        'accounts.CustomerAccount',
         on_delete=models.CASCADE,
-        related_name='subscriptions',
-        help_text="User who owns this subscription"
+        related_name='subscription'  # Note: singular, not plural!
     )
+
     plan = models.ForeignKey(
-        Plan,
+        'Plan',
         on_delete=models.PROTECT,
-        related_name='subscriptions',
-        help_text="Billing plan for this subscription"
-    )
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='active',
-        help_text="Current status of the subscription"
-    )
-    current_period_start = models.DateTimeField(
-        help_text="Start date of the current billing period"
-    )
-    current_period_end = models.DateTimeField(
-        help_text="End date of the current billing period"
-    )
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-        help_text="Timestamp when subscription was created"
-    )
-    updated_at = models.DateTimeField(
-        auto_now=True,
-        help_text="Timestamp when subscription was last updated"
+        related_name='subscriptions'
     )
 
-    class Meta:
-        ordering = ['-created_at']
-        verbose_name = 'Subscription'
-        verbose_name_plural = 'Subscriptions'
-        indexes = [
-            models.Index(fields=['user', 'status']),
-            models.Index(fields=['status']),
-        ]
+    # Stripe integration
+    stripe_subscription_id = models.CharField(
+        max_length=100,
+        blank=True,
+        default=''
+    )
+
+    # Billing period
+    current_period_start = models.DateTimeField()
+    current_period_end = models.DateTimeField()
+
+    # Trial state (BooleanField as spec requires, NOT status CharField!)
+    is_trial = models.BooleanField(
+        default=False,
+        help_text="True if in trial period"
+    )
+
+    # Cancellation state (BooleanField as spec requires)
+    is_canceled = models.BooleanField(
+        default=False,
+        help_text="True if subscription is canceled"
+    )
 
     def __str__(self):
-        return f"{self.user.username} - {self.plan.get_name_display()} ({self.status})"
+        return f"{self.account.name} - {self.plan.code}"
 
-    def is_active(self):
-        """Check if subscription is currently active"""
-        return self.status == 'active' and self.current_period_end >= timezone.now()
-
-
-class UsageQuota(models.Model):
-    """Track user's usage quota for the current period"""
-
-    user = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name='usage_quotas',
-        help_text="User whose quota is being tracked"
-    )
-    characters_used = models.IntegerField(
-        default=0,
-        help_text="Number of characters used in the current period"
-    )
-    reset_date = models.DateField(
-        help_text="Date when the quota will be reset"
-    )
-
-    class Meta:
-        ordering = ['-reset_date']
-        verbose_name = 'Usage Quota'
-        verbose_name_plural = 'Usage Quotas'
-        unique_together = ['user', 'reset_date']
-        indexes = [
-            models.Index(fields=['user', 'reset_date']),
-        ]
-
-    def __str__(self):
-        return f"{self.user.username} - {self.characters_used} chars used (resets: {self.reset_date})"
-
-    def remaining_characters(self, plan):
-        """Calculate remaining characters for a given plan"""
-        return max(0, plan.character_limit - self.characters_used)
-
-    def can_process(self, character_count, plan):
-        """Check if user can process given number of characters"""
-        return self.characters_used + character_count <= plan.character_limit
+    def is_active(self) -> bool:
+        """
+        Subscription is active if:
+        - Not canceled
+        - Period hasn't expired
+        - Account is active
+        """
+        from django.utils import timezone
+        return (
+            not self.is_canceled and
+            self.current_period_end >= timezone.now() and
+            self.account.is_active
+        )

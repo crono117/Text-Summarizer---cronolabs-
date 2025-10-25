@@ -12,9 +12,18 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 
 from pathlib import Path
 import os
+import environ
+
+# Initialize environment variables
+env = environ.Env(
+    DEBUG=(bool, True)
+)
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Read .env file if it exists
+environ.Env.read_env(os.path.join(BASE_DIR.parent, '.env'))
 
 
 # Quick-start development settings - unsuitable for production
@@ -44,6 +53,7 @@ INSTALLED_APPS = [
     # Custom apps
     "accounts.apps.AccountsConfig",
     "billing.apps.BillingConfig",
+    "security.apps.SecurityConfig",
     "api.apps.ApiConfig",
     "summarizer.apps.SummarizerConfig",
 
@@ -61,6 +71,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",  # Serve static files
     "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -96,11 +107,15 @@ WSGI_APPLICATION = "core.wsgi.application"
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    }
+    "default": env.db(
+        "DATABASE_URL",
+        default="postgresql://summasaas_user:summasaas_dev_password@db:5432/summasaas"
+    )
 }
+
+
+# Custom User Model
+AUTH_USER_MODEL = 'accounts.User'
 
 
 # Password validation
@@ -137,7 +152,17 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
 
-STATIC_URL = "static/"
+STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# Additional directories where Django will look for static files
+STATICFILES_DIRS = [
+    BASE_DIR / "static",
+]
+
+# Media files (User uploaded content)
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "mediafiles"
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field

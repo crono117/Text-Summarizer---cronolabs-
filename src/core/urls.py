@@ -33,4 +33,7 @@ urlpatterns = [
     # App URLs
     path("", include("summarizer.urls")),
     path("billing/", include("billing.urls")),
+
+    # API URLs (WordPress integration and external access)
+    path("api/", include("api.urls")),
 ]

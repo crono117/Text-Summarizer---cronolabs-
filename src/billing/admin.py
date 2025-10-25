@@ -1,42 +1,44 @@
 from django.contrib import admin
-from .models import Plan, Subscription, UsageQuota
+from .models import Plan, Subscription
 
 
 @admin.register(Plan)
 class PlanAdmin(admin.ModelAdmin):
-    list_display = ['name', 'monthly_price', 'character_limit', 'api_rate_limit_per_hour']
-    list_filter = ['name']
-    search_fields = ['name']
-    ordering = ['monthly_price']
+    list_display = [
+        'code',
+        'monthly_price_usd',
+        'max_seats',
+        'allow_team_members',
+        'sla'
+    ]
+    list_filter = ['code', 'allow_team_members', 'sla']
+    search_fields = ['code', 'display_name']
+    ordering = ['monthly_price_usd']
 
 
 @admin.register(Subscription)
 class SubscriptionAdmin(admin.ModelAdmin):
-    list_display = ['user', 'plan', 'status', 'current_period_start', 'current_period_end', 'created_at']
-    list_filter = ['status', 'plan', 'created_at']
-    search_fields = ['user__username', 'user__email']
-    date_hierarchy = 'created_at'
-    ordering = ['-created_at']
-    readonly_fields = ['created_at', 'updated_at']
+    list_display = [
+        'account',
+        'plan',
+        'is_trial',
+        'is_canceled',
+        'current_period_start',
+        'current_period_end'
+    ]
+    list_filter = ['is_trial', 'is_canceled', 'plan']
+    search_fields = ['account__name', 'stripe_subscription_id']
+    ordering = ['-current_period_start']
+    readonly_fields = ['stripe_subscription_id']
 
     fieldsets = (
-        ('User Information', {
-            'fields': ('user', 'plan')
+        ('Account Information', {
+            'fields': ('account', 'plan')
         }),
         ('Subscription Details', {
-            'fields': ('status', 'current_period_start', 'current_period_end')
+            'fields': ('current_period_start', 'current_period_end', 'stripe_subscription_id')
         }),
-        ('Timestamps', {
-            'fields': ('created_at', 'updated_at'),
-            'classes': ('collapse',)
+        ('Status', {
+            'fields': ('is_trial', 'is_canceled')
         }),
     )
-
-
-@admin.register(UsageQuota)
-class UsageQuotaAdmin(admin.ModelAdmin):
-    list_display = ['user', 'characters_used', 'reset_date']
-    list_filter = ['reset_date']
-    search_fields = ['user__username', 'user__email']
-    date_hierarchy = 'reset_date'
-    ordering = ['-reset_date']
